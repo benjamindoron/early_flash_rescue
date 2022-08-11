@@ -1,0 +1,6 @@
+# Userspace binary
+flash_rescue_userspace/flash_rescue_userspace
+
+# BIOS region; testing data
+*.fd
+flash_rescue_userspace/*test*
