@@ -1,0 +1,37 @@
+##  @file
+#  EFI application to help debugging the Bus Pirate's I2C serial port
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+#
+#
+##
+
+[Defines]
+  INF_VERSION                    = 0x0001001B
+  BASE_NAME                      = BusPirateDebugApp
+  FILE_GUID                      = 46361B5B-AF17-41FF-95F9-E1BCE08435B9
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = BusPirateDebugAppEntryPoint
+
+[Sources.common]
+  BusPirateDebugApp.c
+  DxePrivateSpiLibWrapper.c
+
+[Packages]
+  MdeModulePkg/MdeModulePkg.dec
+  MdePkg/MdePkg.dec
+  IntelSiliconPkg/IntelSiliconPkg.dec
+  KabylakeSiliconPkg/SiPkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  BaseLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  IoLib
+  SerialPortLib
+  PchSpiCommonLib
+  TimerLib
+  UefiLib
