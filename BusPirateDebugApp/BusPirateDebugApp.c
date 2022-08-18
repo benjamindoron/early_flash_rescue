@@ -23,6 +23,7 @@
 #define EARLY_FLASH_RESCUE_PROTOCOL_VERSION 0.1
 #define EARLY_FLASH_RESCUE_COMMAND_HELLO    0x10
 #define EARLY_FLASH_RESCUE_COMMAND_CHECKSUM 0x11
+#define EARLY_FLASH_RESCUE_COMMAND_READ     0x12
 #define EARLY_FLASH_RESCUE_COMMAND_WRITE    0x13
 #define EARLY_FLASH_RESCUE_COMMAND_RESET    0x14
 #define EARLY_FLASH_RESCUE_COMMAND_EXIT     0x15
@@ -145,6 +146,7 @@ InternalPrintData (
 
 /**
  * Write the requested SPI flash block.
+ * TODO: Determine if erase is necessary.
  */
 VOID
 EFIAPI
@@ -170,18 +172,36 @@ WriteBlock (
 
   // Start streaming block
   XferBlock = BlockData;
-  UINTN TODO_readbytes;
   for (Index = 0; Index < SIZE_BLOCK; Index += XferBlockSize) {
-    TODO_readbytes = SerialPortRead (XferBlock, XferBlockSize);
+    // FIXME/HACK: Enormous penalty! 500ms works. Maybe can delay outside with ACK?
+    MicroSecondDelay (20 * MS_IN_SECOND);
+    SerialPortRead (XferBlock, XferBlockSize);
     XferBlock += XferBlockSize;
+    // FIXME: This will incur significant penalty
+    // - However, low baud rate here means that CRC write does not hold
+    // - Alternatively, raise FTDI baud rate?
+    ResponsePacket.Acknowledge = 1;
+    SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof(ResponsePacket));
   }
 
   // TODO: Debugging
   InternalPrintData (BlockData, SIZE_BLOCK);
-  Print (L"Yeah, read bytes from SerialPort is %d\n", TODO_readbytes);
 
 End:
   FreePool (BlockData);
+}
+
+/**
+ * Perform system reset to start this firmware.
+ */
+VOID
+EFIAPI
+PerformSystemReset (
+  VOID
+  )
+{
+  Print (L"FIXME: Refusing to restart!\n");
+  Print (L"Optionally verify the region with FPT\n");
 }
 
 /**
@@ -214,6 +234,11 @@ PerformFlash (
           break;
         case EARLY_FLASH_RESCUE_COMMAND_WRITE:
           WriteBlock (CommandPacket.BlockNumber);
+          break;
+        case EARLY_FLASH_RESCUE_COMMAND_RESET:
+          PerformSystemReset ();
+          // TODO: Fallthrough?
+          NoUserspaceExit = 0;
           break;
         case EARLY_FLASH_RESCUE_COMMAND_EXIT:
           NoUserspaceExit = 0;
@@ -286,7 +311,7 @@ BusPirateDebugAppEntryPoint (
     goto End;
   }
 
-  Print (L"Flash operation complete.");
+  Print (L"Flash operation complete.\n");
 
 End:
   SpiServiceDeInit ();

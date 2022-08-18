@@ -14,11 +14,12 @@
 
 #define SIZE_BLOCK    4096
 #define SIZE_MB       (1024 * 1024)
-#define SECONDS_IN_MS 1000
+#define MS_IN_SECOND  1000
 
 #define EARLY_FLASH_RESCUE_PROTOCOL_VERSION 0.25
 #define EARLY_FLASH_RESCUE_COMMAND_HELLO    0x10
 #define EARLY_FLASH_RESCUE_COMMAND_CHECKSUM 0x11
+#define EARLY_FLASH_RESCUE_COMMAND_READ     0x12
 #define EARLY_FLASH_RESCUE_COMMAND_WRITE    0x13
 #define EARLY_FLASH_RESCUE_COMMAND_RESET    0x14
 #define EARLY_FLASH_RESCUE_COMMAND_EXIT     0x15
@@ -39,6 +40,7 @@ static FILE *bios_fp;
 static int serial_dev;
 static uint8_t implementation = 0xFF;
 static uint16_t xfer_block_size = SIZE_BLOCK;
+
 
 /* Written with help from
    https://blog.mbedded.ninja/programming/operating-systems/linux/linux-serial-ports-using-c-cpp/ */
@@ -149,18 +151,18 @@ void initialise_debug_port(void)
 
 		// usleep() to allow interactive console to keep up
 		serial_fifo_write(bp_rst_sequence, sizeof(bp_rst_sequence));
-		usleep(100 * SECONDS_IN_MS);
+		usleep(100 * MS_IN_SECOND);
 		serial_fifo_write(bp_i2c_sequence, sizeof(bp_i2c_sequence));
-		usleep(100 * SECONDS_IN_MS);
+		usleep(100 * MS_IN_SECOND);
 		serial_fifo_write(bp_debug_port, sizeof(bp_debug_port));
-		usleep(100 * SECONDS_IN_MS);
+		usleep(100 * MS_IN_SECOND);
 	}
 
 	// Don't care what debug port responded
 	tcflush(serial_dev, TCIOFLUSH);
 }
 
-// Wait for `HELLO` packet
+// Wait for `HELLO` command packet
 void wait_for_hello(void)
 {
 	EARLY_FLASH_RESCUE_COMMAND hello_packet;
@@ -181,11 +183,22 @@ void wait_for_hello(void)
 	tcflush(serial_dev, TCIOFLUSH);
 }
 
+// Wait for `ACK` response helper
+void wait_for_ack_on(char *progress_string)
+{
+	EARLY_FLASH_RESCUE_RESPONSE response_packet;
+
+	serial_fifo_read(&response_packet, sizeof(response_packet));
+	while (response_packet.Acknowledge != 1) {
+		printf("%s NACK'd. Serial port busy...\n", progress_string);
+		serial_fifo_read(&response_packet, sizeof(response_packet));
+	}
+}
+
 // By requesting checksums, we attempt optimising the flash procedure
 uint32_t request_block_checksum(uint32_t address)
 {
 	EARLY_FLASH_RESCUE_COMMAND command_packet;
-	EARLY_FLASH_RESCUE_RESPONSE response_packet;
 	uint32_t response_crc = 0;
 
 	command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_CHECKSUM;
@@ -193,11 +206,7 @@ uint32_t request_block_checksum(uint32_t address)
 	serial_fifo_write(&command_packet, sizeof(command_packet));
 
 	// Board acknowledges when it's ready
-	serial_fifo_read(&response_packet, sizeof(response_packet));
-	while (response_packet.Acknowledge != 1) {
-		printf("COMMAND_CHECKSUM NACK'd. Serial port busy...\n");
-		serial_fifo_read(&response_packet, sizeof(response_packet));
-	}
+	wait_for_ack_on("COMMAND_CHECKSUM");
 
 	// Retrieve packet with requested data
 	serial_fifo_read(&response_crc, sizeof(response_crc));
@@ -208,24 +217,23 @@ uint32_t request_block_checksum(uint32_t address)
 void write_block(uint32_t address, void *block)
 {
 	EARLY_FLASH_RESCUE_COMMAND command_packet;
-	EARLY_FLASH_RESCUE_RESPONSE response_packet;
 
 	command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_WRITE;
 	command_packet.BlockNumber = (address / SIZE_BLOCK);
 	serial_fifo_write(&command_packet, sizeof(command_packet));
 
 	// Board acknowledges when it's ready
-	serial_fifo_read(&response_packet, sizeof(response_packet));
-	while (response_packet.Acknowledge != 1) {
-		printf("COMMAND_WRITE NACK'd. Serial port busy...\n");
-		serial_fifo_read(&response_packet, sizeof(response_packet));
-	}
+	wait_for_ack_on("COMMAND_WRITE");
 
-	// Start streaming data
+	// Start streaming block
 	void *xfer_block = block;
 	for (int i = 0; i < SIZE_BLOCK; i += xfer_block_size) {
 		serial_fifo_write(xfer_block, xfer_block_size);
 		xfer_block += xfer_block_size;
+		// FIXME: This will incur significant penalty
+		// - However, low baud rate here means that CRC write does not hold
+		// - Alternatively, raise FTDI baud rate?
+		wait_for_ack_on("WRITE_DATA");
 	}
 }
 
@@ -235,6 +243,7 @@ void perform_flash(void)
 	struct stat bios_fp_stats;
 	void *bios_block;
 	uint32_t crc;
+	uint8_t region_modified;
 	EARLY_FLASH_RESCUE_COMMAND command_packet;
 
 	// Determine size
@@ -242,7 +251,7 @@ void perform_flash(void)
 	fstat(fileno(bios_fp), &bios_fp_stats);
 	printf("BIOS image is %.2f MiB (%d blocks)\n",
 		(float)bios_fp_stats.st_size / SIZE_MB,
-		bios_fp_stats.st_size / SIZE_BLOCK);
+		(int)bios_fp_stats.st_size / SIZE_BLOCK);
 	if (bios_fp_stats.st_size % SIZE_BLOCK != 0) {
 		printf("BIOS image is not a multiple of %d!", SIZE_BLOCK);
 		return;
@@ -253,26 +262,49 @@ void perform_flash(void)
 	fread(bios_block, SIZE_BLOCK, 1, bios_fp);
 
 	// Write modified blocks
+	region_modified = 0;
+	printf("Writing...\n");
+	for (int i = 0; i < bios_fp_stats.st_size; i += SIZE_BLOCK) {
+		// Independent checksums
+		crc = crc32(0, bios_block, SIZE_BLOCK);
+		// TODO: Handle NACKs
+		if (request_block_checksum(i) != crc) {
+			write_block(i, bios_block);
+			region_modified = 1;
+		}
+
+		fseek(bios_fp, i, SEEK_SET);
+		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+	}
+
+	// Perform verification
+	fseek(bios_fp, 0, SEEK_SET);
+	fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+	printf("Verifying...\n");
 	for (int i = 0; i < bios_fp_stats.st_size; i += SIZE_BLOCK) {
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
 		// TODO: Handle NACKs
 		if (request_block_checksum(i) != crc)
-			write_block(i, bios_block);
+			printf("Verification FAILURE at 0x%x!\n", i);
 
 		fseek(bios_fp, i, SEEK_SET);
 		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
 	}
 
 	// Finalise
-	command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_EXIT;
-	serial_fifo_write(&command_packet, sizeof(command_packet));
-	printf("Flash operations completed successfully!\n");
+	if (region_modified == 0)
+		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_EXIT;
+	else
+		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_RESET;
 
+	serial_fifo_write(&command_packet, sizeof(command_packet));
+
+	printf("Flash operations completed successfully!\n");
 	free(bios_block);
 }
 
-// TODO: Win32 support
+// TODO: Win32 support; implement read to complete interface
 int main(int argc, char *argv[])
 {
 	int return_value;
