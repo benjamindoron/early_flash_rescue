@@ -11,7 +11,7 @@
   BASE_NAME                      = BusPirateDebugApp
   FILE_GUID                      = 46361B5B-AF17-41FF-95F9-E1BCE08435B9
   MODULE_TYPE                    = UEFI_APPLICATION
-  VERSION_STRING                 = 1.0
+  VERSION_STRING                 = 0.25
   ENTRY_POINT                    = BusPirateDebugAppEntryPoint
 
 [Sources.common]

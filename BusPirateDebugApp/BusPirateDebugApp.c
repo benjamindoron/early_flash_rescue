@@ -1,6 +1,7 @@
 /** @file
   Early SPI flash rescue protocol - board implementation
 
+  Copyright (c) 2022, Baruch Binyamin Doron<BR>
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 
@@ -146,7 +147,6 @@ InternalPrintData (
 
 /**
  * Write the requested SPI flash block.
- * TODO: Determine if erase is necessary.
  */
 VOID
 EFIAPI
@@ -159,6 +159,7 @@ WriteBlock (
   EARLY_FLASH_RESCUE_RESPONSE  ResponsePacket;
   VOID                         *XferBlock;
   UINTN                        Index;
+  EFI_STATUS                   Status;
 
   // `BlockNumber` starting in BIOS region
   Address = BlockNumber * SIZE_BLOCK;
@@ -173,19 +174,43 @@ WriteBlock (
   // Start streaming block
   XferBlock = BlockData;
   for (Index = 0; Index < SIZE_BLOCK; Index += XferBlockSize) {
-    // FIXME/HACK: Enormous penalty! 500ms works. Maybe can delay outside with ACK?
-    MicroSecondDelay (20 * MS_IN_SECOND);
+    // FIXME: This will incur some penalty, but we must wait
+    // - Microchip PIC <-> FTDI at baud rate limit?
+    MicroSecondDelay (25 * MS_IN_SECOND);
     SerialPortRead (XferBlock, XferBlockSize);
     XferBlock += XferBlockSize;
-    // FIXME: This will incur significant penalty
-    // - However, low baud rate here means that CRC write does not hold
-    // - Alternatively, raise FTDI baud rate?
+    // FIXME: This will incur some penalty, but userspace must wait
     ResponsePacket.Acknowledge = 1;
     SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof(ResponsePacket));
   }
 
-  // TODO: Debugging
-  InternalPrintData (BlockData, SIZE_BLOCK);
+  //InternalPrintData (BlockData, SIZE_BLOCK);
+#if 1
+  // TODO: SPI flash is is fairly durable, but determine when erase is necessary.
+  Status = SpiProtocolFlashErase (
+             &(mSpiInstance->SpiProtocol),
+             &gFlashRegionBiosGuid,
+             Address,
+             SIZE_BLOCK
+             );
+  if (EFI_ERROR (Status)) {
+    // TODO: NACK the block
+    Print (L"Failed to erase block 0x%x!\n", BlockNumber);
+    goto End;
+  }
+
+  Status = SpiProtocolFlashWrite (
+             &(mSpiInstance->SpiProtocol),
+             &gFlashRegionBiosGuid,
+             Address,
+             SIZE_BLOCK,
+             BlockData
+             );
+  if (EFI_ERROR (Status)) {
+    // TODO: NACK the block
+    Print (L"Failed to write block 0x%x!\n", BlockNumber);
+  }
+#endif
 
 End:
   FreePool (BlockData);
@@ -227,6 +252,9 @@ PerformFlash (
   while (NoUserspaceExit) {
     // Check if there is command waiting for us
     if (SerialPortPoll ()) {
+      // Stall a tiny bit, in-case the remainder of the packet is flushing
+      MicroSecondDelay (10 * MS_IN_SECOND);
+
       SerialPortRead ((UINT8 *)&CommandPacket, sizeof(CommandPacket));
       switch (CommandPacket.Command) {
         case EARLY_FLASH_RESCUE_COMMAND_CHECKSUM:
@@ -253,11 +281,11 @@ PerformFlash (
 
     if ((GetTimeInNanoSecond (GetPerformanceCounter ()) - LastServicedTimeNs) >=
         (10ULL * NS_IN_SECOND)) {
-          // This is very bad. SPI flash could be inconsistent
-          // - In CAR there's likely too little memory to stash a backup
-          Print (L"Fatal error! Userspace has failed to answer for 10s!\n");
-          return EFI_TIMEOUT;
-        }
+      // This is very bad. SPI flash could be inconsistent
+      // - In CAR there's likely too little memory to stash a backup
+      Print (L"Fatal error! Userspace has failed to answer for 10s!\n");
+      return EFI_TIMEOUT;
+    }
   }
 
   return EFI_SUCCESS;
@@ -301,10 +329,10 @@ BusPirateDebugAppEntryPoint (
     goto End;
   }
 
-  Print (L"Userspace acknowledged HELLO!\n");
+  Print (L"Userspace acknowledged HELLO.\n");
 
   // Step 2
-  Print (L"Entering flash loop...\n");
+  Print (L"Entering flash operations loop...\n");
   Status = PerformFlash ();
   if (EFI_ERROR (Status)) {
     Print (L"Flash operation failed!\n");

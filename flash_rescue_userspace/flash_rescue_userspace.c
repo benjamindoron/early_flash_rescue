@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 #include <zlib.h>
 
@@ -116,7 +117,8 @@ int initialise_userspace(int argc, char *argv[])
 			argv[0]);
 		printf("Implementation modes:\n");
 		printf("  1: Bus Pirate\n");
-		printf("  254: (Init not required)\n");
+		printf("  254: (No initialisation or quirks required)\n");
+		printf("  255: (Reserved - MAX)\n");
 		return 1;
 	}
 
@@ -171,7 +173,7 @@ void wait_for_hello(void)
 	printf("Awaiting a COMMAND_HELLO...\n");
 	serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	while (hello_packet.Command != EARLY_FLASH_RESCUE_COMMAND_HELLO) {
-		printf("Still awaiting a COMMAND_HELLO. Serial port busy...\n");
+		printf("\b\r%c[2K\rStill awaiting a COMMAND_HELLO. Serial port busy...\n", 0x1B);
 		serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	}
 
@@ -190,7 +192,7 @@ void wait_for_ack_on(char *progress_string)
 
 	serial_fifo_read(&response_packet, sizeof(response_packet));
 	while (response_packet.Acknowledge != 1) {
-		printf("%s NACK'd. Serial port busy...\n", progress_string);
+		printf("\b\r%c[2K\r%s NACK'd. Serial port busy...\n", 0x1B, progress_string);
 		serial_fifo_read(&response_packet, sizeof(response_packet));
 	}
 }
@@ -237,13 +239,38 @@ void write_block(uint32_t address, void *block)
 	}
 }
 
+/* Written with help from
+   https://gist.github.com/amullins83/24b5ef48657c08c4005a8fab837b7499/ */
+#define TO_PERCENTAGE(val, total) (100 - (((total - val) * 100) / total))
+void draw_progress_bar(uint8_t percent)
+{
+	#define BAR_LENGTH 25
+	#define PERCENT_TO_CHAR (100 / BAR_LENGTH)
+	// Allocate space for bar, as well as brackets and NULL terminator
+	char progress_string[(BAR_LENGTH + 3)];
+
+	// Build a progress bar
+	memset(progress_string, ' ', (BAR_LENGTH + 2));
+	progress_string[0] = '[';
+	progress_string[(BAR_LENGTH + 1)] = ']';
+	progress_string[(BAR_LENGTH + 2)] = 0;
+
+	// Copy in this percentage as chars
+	if (percent > 100) percent = 100;
+	memset(progress_string + 1, '#', percent / PERCENT_TO_CHAR);
+
+	printf("\b\r%c[2K\r%s", 0x1B, progress_string);
+	fflush(stdout);
+}
+
 // Orchestrate flash operations
 void perform_flash(void)
 {
 	struct stat bios_fp_stats;
-	void *bios_block;
-	uint32_t crc;
 	uint8_t region_modified;
+	void *bios_block;
+	time_t start_time, stop_time, diff_time;
+	uint32_t crc;
 	EARLY_FLASH_RESCUE_COMMAND command_packet;
 
 	// Determine size
@@ -257,14 +284,19 @@ void perform_flash(void)
 		return;
 	}
 
-	// Read blocks
-	bios_block = malloc(SIZE_BLOCK);
-	fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+	region_modified = 0;
 
 	// Write modified blocks
-	region_modified = 0;
 	printf("Writing...\n");
+	bios_block = malloc(SIZE_BLOCK);
+	time(&start_time);
 	for (int i = 0; i < bios_fp_stats.st_size; i += SIZE_BLOCK) {
+		draw_progress_bar(TO_PERCENTAGE(i, bios_fp_stats.st_size));
+
+		// Read this block
+		fseek(bios_fp, i, SEEK_SET);
+		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
 		// TODO: Handle NACKs
@@ -272,35 +304,43 @@ void perform_flash(void)
 			write_block(i, bios_block);
 			region_modified = 1;
 		}
-
-		fseek(bios_fp, i, SEEK_SET);
-		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
 	}
+	printf("\n");
+
+	if (region_modified == 0)
+		goto end;
 
 	// Perform verification
-	fseek(bios_fp, 0, SEEK_SET);
-	fread(bios_block, SIZE_BLOCK, 1, bios_fp);
 	printf("Verifying...\n");
 	for (int i = 0; i < bios_fp_stats.st_size; i += SIZE_BLOCK) {
+		draw_progress_bar(TO_PERCENTAGE(i, bios_fp_stats.st_size));
+
+		// Read this block
+		fseek(bios_fp, i, SEEK_SET);
+		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
 		// TODO: Handle NACKs
-		if (request_block_checksum(i) != crc)
+		if (request_block_checksum(i) != crc) {
 			printf("Verification FAILURE at 0x%x!\n", i);
-
-		fseek(bios_fp, i, SEEK_SET);
-		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+		}
 	}
+	time(&stop_time);
+	diff_time = stop_time - start_time;
+	printf("\nWrite operation took %ldm%lds\n",
+		diff_time / 60, diff_time % 60);
 
 	// Finalise
-	if (region_modified == 0)
-		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_EXIT;
-	else
+	if (region_modified == 1)
 		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_RESET;
+	else
+end:
+		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_EXIT;
 
 	serial_fifo_write(&command_packet, sizeof(command_packet));
 
-	printf("Flash operations completed successfully!\n");
+	printf("Flash operations completed successfully.\n");
 	free(bios_block);
 }
 
