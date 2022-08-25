@@ -16,30 +16,7 @@
 #include <Protocol/Spi2.h>
 
 #include <Library/PchSpiCommonLib.h>
-
-#define SIZE_BLOCK    4096
-#define MS_IN_SECOND  1000
-#define NS_IN_SECOND  (1000 * 1000 * 1000)
-
-#define EARLY_FLASH_RESCUE_PROTOCOL_VERSION 0.1
-#define EARLY_FLASH_RESCUE_COMMAND_HELLO    0x10
-#define EARLY_FLASH_RESCUE_COMMAND_CHECKSUM 0x11
-#define EARLY_FLASH_RESCUE_COMMAND_READ     0x12
-#define EARLY_FLASH_RESCUE_COMMAND_WRITE    0x13
-#define EARLY_FLASH_RESCUE_COMMAND_RESET    0x14
-#define EARLY_FLASH_RESCUE_COMMAND_EXIT     0x15
-
-#pragma pack(push, 1)
-typedef struct {
-	UINT8   Command;
-	UINT16  BlockNumber;  // This 4K block in BIOS region
-} EARLY_FLASH_RESCUE_COMMAND;
-
-typedef struct {
-	UINT8   Acknowledge;  // Usually, ACK == 0x01
-	UINT16  Size;         // OPTIONAL?
-} EARLY_FLASH_RESCUE_RESPONSE;
-#pragma pack(pop)
+#include "FlashRescueBoard.h"
 
 extern SPI_INSTANCE  *mSpiInstance;
 // TODO: Use PCD; appropriate size
@@ -125,24 +102,6 @@ SendBlockChecksum (
 
 End:
   FreePool (BlockData);
-}
-
-VOID
-EFIAPI
-InternalPrintData (
-  IN UINT8   *Data8,
-  IN UINTN   DataSize
-  )
-{
-  UINTN      Index;
-
-  for (Index = 0; Index < DataSize; Index++) {
-    if (Index % 0x10 == 0) {
-      Print (L"\n%08X:", Index);
-    }
-    Print (L" %02X", *Data8++);
-  }
-  Print (L"\n");
 }
 
 /**

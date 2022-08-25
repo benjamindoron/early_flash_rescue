@@ -16,6 +16,7 @@
 
 [Sources.common]
   BusPirateDebugApp.c
+  DebuggingHelpers.c
   DxePrivateSpiLibWrapper.c
 
 [Packages]
