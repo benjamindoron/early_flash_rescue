@@ -264,7 +264,7 @@ SpiServiceDeInit (
 **/
 EFI_STATUS
 EFIAPI
-BusPirateDebugAppEntryPoint (
+FlashRescueBoardAppEntryPoint (
   IN EFI_HANDLE        ImageHandle,
   IN EFI_SYSTEM_TABLE  *SystemTable
   )
@@ -272,7 +272,7 @@ BusPirateDebugAppEntryPoint (
   EFI_TPL     PreviousTpl;
   EFI_STATUS  Status;
 
-  Print (L"BusPirateDebugAppEntryPoint() Start\n");
+  Print (L"FlashRescueBoardAppEntryPoint() Start\n");
 
   Status = SpiServiceInit ();
   if (EFI_ERROR (Status)) {
@@ -303,7 +303,7 @@ BusPirateDebugAppEntryPoint (
 End:
   SpiServiceDeInit ();
 
-  Print (L"BusPirateDebugAppEntryPoint() End\n");
+  Print (L"FlashRescueBoardAppEntryPoint() End\n");
 
   return EFI_SUCCESS;
 }

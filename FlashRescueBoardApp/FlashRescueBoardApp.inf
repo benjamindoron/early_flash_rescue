@@ -8,14 +8,14 @@
 
 [Defines]
   INF_VERSION                    = 0x0001001B
-  BASE_NAME                      = BusPirateDebugApp
+  BASE_NAME                      = FlashRescueBoardApp
   FILE_GUID                      = 46361B5B-AF17-41FF-95F9-E1BCE08435B9
   MODULE_TYPE                    = UEFI_APPLICATION
   VERSION_STRING                 = 0.25
-  ENTRY_POINT                    = BusPirateDebugAppEntryPoint
+  ENTRY_POINT                    = FlashRescueBoardAppEntryPoint
 
 [Sources.common]
-  BusPirateDebugApp.c
+  FlashRescueBoardApp.c
   DebuggingHelpers.c
   DxePrivateSpiLibWrapper.c
 
