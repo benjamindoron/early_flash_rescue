@@ -8,10 +8,12 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 
 #include <IndustryStandard/Pci30.h>
 
+#include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/IoLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/UefiBootServicesTableLib.h>
+#include <Library/PciSegmentLib.h>
 #include <Library/SpiLib.h>
 
 #include <Protocol/Spi2.h>
@@ -121,7 +123,25 @@ DisableBiosWriteProtect (
   VOID
   )
 {
-  // Cannot be helped with DXE privileges
+  UINT64  SpiBaseAddress;
+
+  SpiBaseAddress =  PCI_SEGMENT_LIB_ADDRESS (
+                      0,
+                      0,
+                      PCI_DEVICE_NUMBER_PCH_SPI,
+                      PCI_FUNCTION_NUMBER_PCH_SPI,
+                      0
+                      );
+
+  //
+  // Set BIOSWE bit (SPI PCI Offset DCh [0]) = 1b
+  // Enable the access to the BIOS space for both read and write cycles
+  //
+  PciSegmentOr8 (
+    SpiBaseAddress + R_PCH_SPI_BC,
+    B_PCH_SPI_BC_WPD
+    );
+
   return EFI_SUCCESS;
 }
 
@@ -135,6 +155,21 @@ EnableBiosWriteProtect (
   VOID
   )
 {
-  // Cannot be helped with DXE privileges
-  return;
+  UINT64  SpiBaseAddress;
+
+  SpiBaseAddress =  PCI_SEGMENT_LIB_ADDRESS (
+                      0,
+                      0,
+                      PCI_DEVICE_NUMBER_PCH_SPI,
+                      PCI_FUNCTION_NUMBER_PCH_SPI,
+                      0
+                      );
+
+  //
+  // Disable the access to the BIOS space for write cycles
+  //
+  PciSegmentAnd8 (
+    SpiBaseAddress + R_PCH_SPI_BC,
+    (UINT8) (~B_PCH_SPI_BC_WPD)
+    );
 }

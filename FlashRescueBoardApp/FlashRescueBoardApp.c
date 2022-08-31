@@ -1,7 +1,7 @@
 /** @file
   Early SPI flash rescue protocol - board implementation
 
-  Copyright (c) 2022, Baruch Binyamin Doron<BR>
+  Copyright (c) 2022, Baruch Binyamin Doron.<BR>
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 

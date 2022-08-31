@@ -8,7 +8,7 @@
 
 /* Written with help from
    https://blog.mbedded.ninja/programming/operating-systems/linux/linux-serial-ports-using-c-cpp/ */
-int serial_open(char *dev)
+int serial_open(char *dev, speed_t baud)
 {
 	int serial_port;
 	struct termios tty;
@@ -33,7 +33,7 @@ int serial_open(char *dev)
 	tty.c_lflag = 0;
 #endif
 
-	if (cfsetspeed(&tty, B115200) != 0)
+	if (cfsetspeed(&tty, baud) != 0)
 		goto fail;
 	if (tcsetattr(serial_port, TCSANOW, &tty) != 0)
 		goto fail;

@@ -3,8 +3,10 @@
 #ifndef FLASH_RESCUE_USERSPACE_H
 #define FLASH_RESCUE_USERSPACE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <termios.h>
 
 #define SIZE_BLOCK    4096
 #define SIZE_MB       (1024 * 1024)
@@ -32,5 +34,8 @@ typedef struct {
 
 extern FILE *bios_fp;
 extern int serial_dev;
+extern char *p_dev;
+extern uint8_t implementation;
+extern bool implementation_high_speed;
 
 #endif

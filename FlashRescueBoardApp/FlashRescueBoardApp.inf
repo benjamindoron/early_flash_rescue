@@ -1,8 +1,8 @@
 ##  @file
-#  EFI application to help debugging the Bus Pirate's I2C serial port
+#  EFI application to help debugging the early SPI flash rescue protocol
 #
+#  Copyright (c) 2022, Baruch Binyamin Doron.<BR>
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
-#
 #
 ##
 
@@ -32,6 +32,7 @@
   BaseMemoryLib
   MemoryAllocationLib
   IoLib
+  PciSegmentLib
   SerialPortLib
   PchSpiCommonLib
   TimerLib

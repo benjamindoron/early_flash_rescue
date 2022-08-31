@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <signal.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <termios.h>
 #include <time.h>
@@ -13,7 +15,9 @@
 
 FILE *bios_fp;
 int serial_dev;
-static uint8_t implementation = 0xFF;
+char *p_dev;
+uint8_t implementation = 0xFF;
+bool implementation_high_speed = false;
 static uint16_t xfer_block_size = SIZE_BLOCK;
 
 
@@ -22,24 +26,33 @@ int initialise_userspace(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "f:d:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "f:d:m:s")) != -1) {
 		// Required parameter is in global "optarg"
 		switch (opt) {
 		case 'f':
 			bios_fp = fopen(optarg, "r");
 			break;
 		case 'd':
-			serial_dev = serial_open(optarg);
+			serial_dev = serial_open(optarg, B115200);
+			p_dev = optarg;
 			break;
 		case 'm':
 			implementation = atoi(optarg);
+			break;
+		case 's':
+			implementation_high_speed = true;
 			break;
 		}
 	}
 
 	if (bios_fp == NULL || serial_dev < 0 || implementation == 0xFF) {
-		printf("Usage: %s -f <BIOS image> -d <serial port> -m [init]\n",
-			argv[0]);
+		printf("Usage: %s [OPTIONS]", argv[0]);
+		printf("\n");
+		printf("  -f <BIOS image>\n");
+		printf("  -d <serial port>\n");
+		printf("  -m [mode]\n");
+		printf("  -s [high speed; OPTIONAL]\n");
+		printf("\n");
 		printf("Implementation modes:\n");
 		printf("  1: Bus Pirate\n");
 		printf("  254: (No initialisation or quirks required)\n");
@@ -56,20 +69,31 @@ int initialise_userspace(int argc, char *argv[])
 // Implementation-specific methods to bring-up underlying layer
 void initialise_debug_port(void)
 {
-	char bp_rst_sequence[] = { '\n', '#', '\n' };
-	char bp_i2c_sequence[] = { 'm', '\n', '4', '\n', '2', '\n' };
-	char bp_debug_port[] = { '(', '5', ')', '\n' };
+	uint8_t bp_debug_port_exit[] = { 0x1B, 0x5B, 0x32, 0x34, 0x7E };
+	char *bp_not_exits = "\n";
+	char *bp_rst_sequence = "\n#\n";
+	char *bp_i2c_sequence = "m\n4\n2\n";
+	char *bp_debug_port = "(5)\n";
 
 	if (implementation == 1) {
 		// TODO: Appropriate size
 		xfer_block_size = 64;
 
 		// usleep() to allow interactive console to keep up
-		serial_fifo_write(bp_rst_sequence, sizeof(bp_rst_sequence));
+		serial_fifo_write(bp_debug_port_exit, sizeof(bp_debug_port_exit));
 		usleep(100 * MS_IN_SECOND);
-		serial_fifo_write(bp_i2c_sequence, sizeof(bp_i2c_sequence));
+		serial_fifo_write(bp_not_exits, strlen(bp_not_exits));
 		usleep(100 * MS_IN_SECOND);
-		serial_fifo_write(bp_debug_port, sizeof(bp_debug_port));
+		serial_fifo_write(bp_rst_sequence, strlen(bp_rst_sequence));
+		usleep(100 * MS_IN_SECOND);
+
+		// TODO: Debugging
+		if (implementation_high_speed)
+			bp_switch_baudrate_generator(true);
+
+		serial_fifo_write(bp_i2c_sequence, strlen(bp_i2c_sequence));
+		usleep(100 * MS_IN_SECOND);
+		serial_fifo_write(bp_debug_port, strlen(bp_debug_port));
 		usleep(100 * MS_IN_SECOND);
 	}
 
@@ -109,7 +133,7 @@ uint32_t request_block_checksum(uint32_t address)
 	serial_fifo_write(&command_packet, sizeof(command_packet));
 
 	// Board acknowledges when it's ready
-	wait_for_ack_on("COMMAND_CHECKSUM");
+	wait_for_ack_on("COMMAND_CHECKSUM", address);
 
 	// Retrieve packet with requested data
 	serial_fifo_read(&response_crc, sizeof(response_crc));
@@ -126,7 +150,7 @@ void write_block(uint32_t address, void *block)
 	serial_fifo_write(&command_packet, sizeof(command_packet));
 
 	// Board acknowledges when it's ready
-	wait_for_ack_on("COMMAND_WRITE");
+	wait_for_ack_on("COMMAND_WRITE", address);
 
 	// Start streaming block
 	void *xfer_block = block;
@@ -136,7 +160,7 @@ void write_block(uint32_t address, void *block)
 		// FIXME: This will incur significant penalty
 		// - However, low baud rate here means that CRC write does not hold
 		// - Alternatively, raise FTDI baud rate?
-		wait_for_ack_on("WRITE_DATA");
+		wait_for_ack_on("WRITE_DATA", address);
 	}
 }
 
@@ -144,7 +168,7 @@ void write_block(uint32_t address, void *block)
 void perform_flash(void)
 {
 	struct stat bios_fp_stats;
-	uint8_t region_modified;
+	bool region_modified;
 	void *bios_block;
 	time_t start_time, stop_time, diff_time;
 	uint32_t crc;
@@ -161,10 +185,9 @@ void perform_flash(void)
 		return;
 	}
 
-	region_modified = 0;
-
 	// Write modified blocks
 	printf("Writing...\n");
+	region_modified = false;
 	bios_block = malloc(SIZE_BLOCK);
 	time(&start_time);
 	for (int i = 0; i < bios_fp_stats.st_size; i += SIZE_BLOCK) {
@@ -179,16 +202,19 @@ void perform_flash(void)
 		// TODO: Handle NACKs
 		if (request_block_checksum(i) != crc) {
 			write_block(i, bios_block);
-			region_modified = 1;
+			region_modified = true;
 		}
 	}
 	printf("\n");
 
-	if (region_modified == 0)
+	if (!region_modified) {
+		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_EXIT;
 		goto end;
+	}
 
 	// Perform verification
 	printf("Verifying...\n");
+	region_modified = false;
 	for (int i = 0; i < bios_fp_stats.st_size; i += SIZE_BLOCK) {
 		draw_progress_bar(TO_PERCENTAGE(i, bios_fp_stats.st_size));
 
@@ -201,6 +227,7 @@ void perform_flash(void)
 		// TODO: Handle NACKs
 		if (request_block_checksum(i) != crc) {
 			printf("Verification FAILURE at 0x%x!\n", i);
+			region_modified = true;
 		}
 	}
 	time(&stop_time);
@@ -209,16 +236,16 @@ void perform_flash(void)
 		diff_time / 60, diff_time % 60);
 
 	// Finalise
-	if (region_modified == 1)
-		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_RESET;
-	else
+	command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_RESET;
+
 end:
-		command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_EXIT;
-
 	serial_fifo_write(&command_packet, sizeof(command_packet));
-
-	printf("Flash operations completed successfully.\n");
 	free(bios_block);
+
+	if (!region_modified)
+		printf("Flash operations completed successfully.\n");
+	else
+		printf("Flash operations failed!\n");
 }
 
 // TODO: Win32 support; implement read and complete interface
@@ -249,6 +276,8 @@ cleanup:
 	// Step 5
 	if (bios_fp)
 		fclose(bios_fp);
+	if (implementation == 1)
+		bp_exit();
 	if (serial_dev)
 		close(serial_dev);
 	return return_value;
