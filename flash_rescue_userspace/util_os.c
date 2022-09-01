@@ -1,13 +1,17 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
+#include <assert.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
 #include "flash_rescue_userspace.h"
+#include "util.h"
 
 /* Written with help from
-   https://blog.mbedded.ninja/programming/operating-systems/linux/linux-serial-ports-using-c-cpp/ */
+   https://blog.mbedded.ninja/programming/operating-systems/linux/linux-serial-ports-using-c-cpp/
+ */
 int serial_open(char *dev, speed_t baud)
 {
 	int serial_port;
@@ -50,19 +54,23 @@ void sig_handler(int sig_num)
 {
 	if (bios_fp)
 		fclose(bios_fp);
+	if (implementation == 1)
+		bp_exit();
 	if (serial_dev)
 		close(serial_dev);
 	_exit(sig_num);
 }
 
 // Can push into buffer while board handles its pulled data
-void serial_fifo_write(void *data, int number_of_bytes)
+void serial_fifo_write(void *data, size_t number_of_bytes)
 {
-	write(serial_dev, data, number_of_bytes);
+	size_t status = write(serial_dev, data, number_of_bytes);
+	assert(status > 0);
 	tcdrain(serial_dev);
 }
 // Can block while awaiting a busy board
-void serial_fifo_read(void *data, int number_of_bytes)
+void serial_fifo_read(void *data, size_t number_of_bytes)
 {
-	read(serial_dev, data, number_of_bytes);
+	size_t status = read(serial_dev, data, number_of_bytes);
+	assert(status > 0);
 }

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
+#include <assert.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -7,7 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <termios.h>
 #include <time.h>
 #include <zlib.h>
 #include "flash_rescue_userspace.h"
@@ -69,7 +69,7 @@ int initialise_userspace(int argc, char *argv[])
 // Implementation-specific methods to bring-up underlying layer
 void initialise_debug_port(void)
 {
-	uint8_t bp_debug_port_exit[] = { 0x1B, 0x5B, 0x32, 0x34, 0x7E };
+	uint8_t bp_debug_port_exit[] = {0x1B, 0x5B, 0x32, 0x34, 0x7E};
 	char *bp_not_exits = "\n";
 	char *bp_rst_sequence = "\n#\n";
 	char *bp_i2c_sequence = "m\n4\n2\n";
@@ -110,7 +110,7 @@ void wait_for_hello(void)
 	printf("Awaiting a COMMAND_HELLO...\n");
 	serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	while (hello_packet.Command != EARLY_FLASH_RESCUE_COMMAND_HELLO) {
-		printf("\b\r%c[2K\rStill awaiting a COMMAND_HELLO. Serial port busy...\n", 0x1B);
+		fprintf(stderr, "Still awaiting a COMMAND_HELLO. Serial port busy...\n");
 		serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	}
 
@@ -171,15 +171,15 @@ void perform_flash(void)
 	bool region_modified;
 	void *bios_block;
 	time_t start_time, stop_time, diff_time;
+	size_t status;
 	uint32_t crc;
 	EARLY_FLASH_RESCUE_COMMAND command_packet;
 
 	// Determine size
 	// - TODO: Check that region matches image by stashing total
 	fstat(fileno(bios_fp), &bios_fp_stats);
-	printf("BIOS image is %.2f MiB (%d blocks)\n",
-		(float)bios_fp_stats.st_size / SIZE_MB,
-		(int)bios_fp_stats.st_size / SIZE_BLOCK);
+	printf("BIOS image is %.2f MiB (%d blocks)\n", (float)bios_fp_stats.st_size / SIZE_MB,
+	       (int)bios_fp_stats.st_size / SIZE_BLOCK);
 	if (bios_fp_stats.st_size % SIZE_BLOCK != 0) {
 		printf("BIOS image is not a multiple of %d!", SIZE_BLOCK);
 		return;
@@ -195,7 +195,8 @@ void perform_flash(void)
 
 		// Read this block
 		fseek(bios_fp, i, SEEK_SET);
-		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+		status = fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+		assert(status > 0);
 
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
@@ -220,20 +221,20 @@ void perform_flash(void)
 
 		// Read this block
 		fseek(bios_fp, i, SEEK_SET);
-		fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+		status = fread(bios_block, SIZE_BLOCK, 1, bios_fp);
+		assert(status > 0);
 
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
 		// TODO: Handle NACKs
 		if (request_block_checksum(i) != crc) {
-			printf("Verification FAILURE at 0x%x!\n", i);
+			fprintf(stderr, "Verification FAILURE at 0x%x!\n", i);
 			region_modified = true;
 		}
 	}
 	time(&stop_time);
 	diff_time = stop_time - start_time;
-	printf("\nWrite operation took %ldm%lds\n",
-		diff_time / 60, diff_time % 60);
+	printf("\nWrite operation took %ldm%lds\n", diff_time / 60, diff_time % 60);
 
 	// Finalise
 	command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_RESET;
@@ -245,7 +246,7 @@ end:
 	if (!region_modified)
 		printf("Flash operations completed successfully.\n");
 	else
-		printf("Flash operations failed!\n");
+		fprintf(stderr, "Flash operations failed!\n");
 }
 
 // TODO: Win32 support; implement read and complete interface
@@ -255,8 +256,8 @@ int main(int argc, char *argv[])
 
 	// Print hello text
 	printf("Early BIOS flash rescue v%.2f (Userspace side)\n",
-		EARLY_FLASH_RESCUE_PROTOCOL_VERSION);
-	printf("NB: At this time, don't use with console - risks read() races\n\n");
+	       EARLY_FLASH_RESCUE_PROTOCOL_VERSION);
+	printf("NB: Cannot open console - serial read() is racey\n\n");
 
 	// Step 1
 	return_value = initialise_userspace(argc, argv);

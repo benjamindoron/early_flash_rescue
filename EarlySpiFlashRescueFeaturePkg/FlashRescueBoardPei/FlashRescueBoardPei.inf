@@ -1,0 +1,34 @@
+##  @file
+#  Early SPI flash rescue protocol - board implementation
+#
+#  Copyright (c) 2022, Baruch Binyamin Doron.<BR>
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+#
+##
+
+[Defines]
+  INF_VERSION                    = 0x0001001B
+  BASE_NAME                      = FlashRescueBoardPei
+  FILE_GUID                      = D1B51B35-E01A-4633-991F-E1B639B8D3AA
+  MODULE_TYPE                    = PEIM
+  VERSION_STRING                 = 0.50
+  ENTRY_POINT                    = FlashRescueBoardPeiEntryPoint
+
+[Sources]
+  FlashRescueBoard.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  EarlySpiFlashRescueFeaturePkg/EarlySpiFlashRescueFeaturePkg.dec
+
+[LibraryClasses]
+  PeimEntryPoint
+  PeiServicesLib
+  BaseMemoryLib
+  PeCoffLib
+
+[Ppis]
+  gPeiFlashRescueReadyInMemoryPpiGuid
+
+[Depex]
+  TRUE

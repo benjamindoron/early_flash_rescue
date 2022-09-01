@@ -1,0 +1,33 @@
+## @file
+# This package provides advanced feature functionality for rescuing SPI flash.
+# This package should only depend on EDK II Core packages, IntelSiliconPkg, and MinPlatformPkg.
+#
+# The DEC files are used by the utilities that parse DSC and
+# INF files to generate AutoGen.c and AutoGen.h files
+# for the build infrastructure.
+#
+# Copyright (c) 2019, Intel Corporation. All rights reserved.<BR>
+#
+# SPDX-License-Identifier: BSD-2-Clause-Patent
+#
+##
+
+[Defines]
+  DEC_SPECIFICATION = 0x00010017
+  PACKAGE_NAME      = EarlySpiFlashRescueFeaturePkg
+  PACKAGE_GUID      = 605FCBD8-1D5A-4B72-9874-8FD7DD4FDABD
+  PACKAGE_VERSION   = 0.1
+
+[Includes]
+  Include
+
+[Guids]
+  gEarlySpiFlashRescueFeaturePkgPkgTokenSpaceGuid  =  {0x3e9700b8, 0x98e2, 0x4db4, {0x8a, 0x46, 0xfe, 0x10, 0x77, 0x64, 0xe8, 0xd0}}
+
+[PcdsFeatureFlag]
+  ## This PCD specifies whether early rescue PEIM is built.
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdFlashRescueFeatureEnable|FALSE|BOOLEAN|0xB0000001
+
+[Ppis]
+  ## Include/Ppi/FeatureInMemory.h
+  gPeiFlashRescueReadyInMemoryPpiGuid = {0xe5147285, 0x4d34, 0x415e, {0x8e, 0xa8, 0x85, 0xbd, 0xd8, 0xc6, 0x5b, 0xde }}

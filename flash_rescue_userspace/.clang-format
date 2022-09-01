@@ -3,6 +3,7 @@ Language:					Cpp
 IndentWidth:					8
 UseTab:						Always
 BreakBeforeBraces:				Linux
+AlignConsecutiveMacros:				true
 AllowShortIfStatementsOnASingleLine:		false
 IndentCaseLabels:				false
 SortIncludes:					false

@@ -34,11 +34,4 @@ typedef struct {
 } EARLY_FLASH_RESCUE_RESPONSE;
 #pragma pack(pop)
 
-VOID
-EFIAPI
-InternalPrintData (
-  IN UINT8   *Data8,
-  IN UINTN   DataSize
-  );
-
 #endif

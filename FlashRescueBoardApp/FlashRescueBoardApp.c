@@ -134,17 +134,17 @@ WriteBlock (
   XferBlock = BlockData;
   for (Index = 0; Index < SIZE_BLOCK; Index += XferBlockSize) {
     // FIXME: This will incur some penalty, but we must wait
-    // - Microchip PIC <-> FTDI at baud rate limit?
-    MicroSecondDelay (25 * MS_IN_SECOND);
+    // - Still debugging timing parameters, especially at higher baudrate
+    MicroSecondDelay (35 * MS_IN_SECOND);
+
     SerialPortRead (XferBlock, XferBlockSize);
     XferBlock += XferBlockSize;
+
     // FIXME: This will incur some penalty, but userspace must wait
     ResponsePacket.Acknowledge = 1;
     SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof(ResponsePacket));
   }
 
-  //InternalPrintData (BlockData, SIZE_BLOCK);
-#if 1
   // TODO: SPI flash is is fairly durable, but determine when erase is necessary.
   Status = SpiProtocolFlashErase (
              &(mSpiInstance->SpiProtocol),
@@ -169,7 +169,6 @@ WriteBlock (
     // TODO: NACK the block
     Print (L"Failed to write block 0x%x!\n", BlockNumber);
   }
-#endif
 
 End:
   FreePool (BlockData);
@@ -212,7 +211,7 @@ PerformFlash (
     // Check if there is command waiting for us
     if (SerialPortPoll ()) {
       // Stall a tiny bit, in-case the remainder of the packet is flushing
-      MicroSecondDelay (10 * MS_IN_SECOND);
+      MicroSecondDelay (5 * MS_IN_SECOND);
 
       SerialPortRead ((UINT8 *)&CommandPacket, sizeof(CommandPacket));
       switch (CommandPacket.Command) {
