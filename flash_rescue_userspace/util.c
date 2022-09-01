@@ -53,8 +53,8 @@ void wait_for_ack_on(char *progress_string, uint32_t address)
 
 	serial_fifo_read(&response_packet, sizeof(response_packet));
 	while (response_packet.Acknowledge != 1) {
-		fprintf(stderr, "%s (0x%x) NACK'd. Serial port busy...\n", progress_string,
-			address);
+		fprintf(stderr, "%s (address 0x%x) NACK'd (byte 0x%x). Serial port busy...\n",
+			progress_string, address, response_packet.Acknowledge);
 		serial_fifo_read(&response_packet, sizeof(response_packet));
 	}
 }

@@ -1,5 +1,5 @@
 ##  @file
-#  EFI application to help debugging the early SPI flash rescue protocol
+#  EFI application to help debugging the early SPI flash rescue protocol.
 #
 #  Copyright (c) 2022, Baruch Binyamin Doron.<BR>
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -14,13 +14,14 @@
   VERSION_STRING                 = 0.50
   ENTRY_POINT                    = FlashRescueBoardAppEntryPoint
 
-[Sources.common]
+[Sources]
   FlashRescueBoardApp.c
+  FlashRescueBoardCommon.c
   DxePrivateSpiLibWrapper.c
 
 [Packages]
-  MdeModulePkg/MdeModulePkg.dec
   MdePkg/MdePkg.dec
+  EarlySpiFlashRescueFeaturePkg/EarlySpiFlashRescueFeaturePkg.dec
   IntelSiliconPkg/IntelSiliconPkg.dec
   KabylakeSiliconPkg/SiPkg.dec
 
@@ -29,6 +30,7 @@
   UefiBootServicesTableLib
   BaseLib
   BaseMemoryLib
+  DebugLib
   MemoryAllocationLib
   IoLib
   PciSegmentLib
@@ -36,3 +38,7 @@
   PchSpiCommonLib
   TimerLib
   UefiLib
+
+[Pcd]
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdUserspaceHostWaitTimeout
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdDataXferPacketSize

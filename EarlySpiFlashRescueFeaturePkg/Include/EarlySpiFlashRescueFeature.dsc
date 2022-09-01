@@ -30,5 +30,5 @@
 # Components section - list of all components needed by this feature.
 #
 ################################################################################
-[Components]
+[Components.IA32]
   EarlySpiFlashRescueFeaturePkg/FlashRescueBoardPei/FlashRescueBoardPei.inf

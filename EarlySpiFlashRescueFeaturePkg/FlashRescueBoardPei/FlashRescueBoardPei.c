@@ -8,9 +8,13 @@
 #include <PiPei.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/DebugLib.h>
-#include <Library/PeiServicesLib.h>
 #include <Library/PeCoffLib.h>
+#include <Library/PeiServicesLib.h>
+#include <Library/ResetSystemLib.h>
+#include <Library/SpiLib.h>
 #include <Ppi/FeatureInMemory.h>
+#include <Ppi/Spi2.h>
+#include "FlashRescueBoard.h"
 
 STATIC CONST EFI_PEI_PPI_DESCRIPTOR  mFlashRescueReadyInMemoryPpiList = {
   EFI_PEI_PPI_DESCRIPTOR_PPI | EFI_PEI_PPI_DESCRIPTOR_TERMINATE_LIST,
@@ -19,41 +23,51 @@ STATIC CONST EFI_PEI_PPI_DESCRIPTOR  mFlashRescueReadyInMemoryPpiList = {
 };
 
 /**
- * Send HELLO command to an awaiting userspace.
- * Permit 15s for response.
- *
- * @return EFI_SUCCESS  Command acknowledged.
- * @return EFI_TIMEOUT  Command timed-out.
- */
-EFI_STATUS
-EFIAPI
-SendHelloPacket (
+  Returns a pointer to the PCH SPI PPI.
+
+  @return Pointer to PCH_SPI2_PPI   If an instance of the PCH SPI PPI is found
+  @return NULL                      If an instance of the PCH SPI PPI is not found
+
+**/
+PCH_SPI2_PPI *
+GetSpiPpi (
   VOID
   )
 {
-  return EFI_SUCCESS;
+  EFI_STATUS    Status;
+  PCH_SPI2_PPI  *PchSpi2Ppi;
+
+  Status =  PeiServicesLocatePpi (
+              &gPchSpi2PpiGuid,
+              0,
+              NULL,
+              (VOID **) &PchSpi2Ppi
+              );
+  if (EFI_ERROR (Status)) {
+    return NULL;
+  }
+
+  return PchSpi2Ppi;
 }
 
 /**
- * Perform flash.
- *
- * @return EFI_SUCCESS  Successful flash.
- * @return EFI_TIMEOUT  Await command timed-out.
- */
-EFI_STATUS
+ * Perform system reset to start this firmware.
+**/
+VOID
 EFIAPI
-PerformFlash (
+PerformSystemReset (
   VOID
   )
 {
-  DEBUG ((DEBUG_INFO, "Hello from %a()!\n", __FUNCTION__));
-
-  return EFI_SUCCESS;
+  //
+  // PPI may be unavailable, but do not risk UAF. Must use silicon variant
+  // 
+  //
+  ResetCold ();
 }
 
 /**
   Entry Point function
-  TODO: Stop using DebugLib.
 
   @param[in] FileHandle  Handle of the file being invoked.
   @param[in] PeiServices Describes the list of possible PEI Services.
@@ -75,8 +89,6 @@ FlashRescueBoardPeiEntryPoint (
   EFI_PHYSICAL_ADDRESS          PeimCopy;
   EFI_PEIM_ENTRY_POINT2         PeimEntryPoint;
 
-  DEBUG ((DEBUG_INFO, "%a() Start\n", __FUNCTION__));
-
   //
   // Second entry: Enter flash loop
   //
@@ -96,6 +108,7 @@ FlashRescueBoardPeiEntryPoint (
   //
   // First entry: Establish communication with board or don't reload
   //
+  DEBUG ((DEBUG_INFO, "HELLO begins. Re-connect with userspace-side\n"));
   Status = SendHelloPacket ();
   if (EFI_ERROR (Status)) {
     goto End;
@@ -155,6 +168,9 @@ FlashRescueBoardPeiEntryPoint (
   //
   // Cleanup
   //
+  Status = SpiServiceInit ();
+  ASSERT_EFI_ERROR (Status);
+
   Status = PeiServicesFreePages (
              PeimCopy,
              EFI_SIZE_TO_PAGES ((UINT32)ImageContext.ImageSize)
@@ -162,7 +178,5 @@ FlashRescueBoardPeiEntryPoint (
   ASSERT_EFI_ERROR (Status);
 
 End:
-  DEBUG ((DEBUG_INFO, "%a() End\n", __FUNCTION__));
-
   return EFI_SUCCESS;
 }

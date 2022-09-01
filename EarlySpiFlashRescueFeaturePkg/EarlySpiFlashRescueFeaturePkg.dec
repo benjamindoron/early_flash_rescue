@@ -22,11 +22,22 @@
   Include
 
 [Guids]
-  gEarlySpiFlashRescueFeaturePkgPkgTokenSpaceGuid  =  {0x3e9700b8, 0x98e2, 0x4db4, {0x8a, 0x46, 0xfe, 0x10, 0x77, 0x64, 0xe8, 0xd0}}
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid  =  {0x3e9700b8, 0x98e2, 0x4db4, {0x8a, 0x46, 0xfe, 0x10, 0x77, 0x64, 0xe8, 0xd0}}
 
 [PcdsFeatureFlag]
   ## This PCD specifies whether early rescue PEIM is built.
   gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdFlashRescueFeatureEnable|FALSE|BOOLEAN|0xB0000001
+
+[PcdsFixedAtBuild]
+  ## This PCD specifies the wait timeout value in millisecond to await a userspace.
+  #  Default timeout value is 15000 milliseconds.
+  #  If user does not want system stall for long time, it can be set to small value.
+  #  Delays in 250ms increments between sending HELLO. Less than this deactivates the feature.
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdUserspaceHostWaitTimeout|15000|UINT32|0xB0000002
+
+  ## This PCD specifies the size in bytes of data packets.
+  ## Dependent on implementation layer. Synchronise with userspace, user must not change without support.
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdDataXferPacketSize|64|UINT16|0xB0000003
 
 [Ppis]
   ## Include/Ppi/FeatureInMemory.h

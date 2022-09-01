@@ -110,7 +110,7 @@ void wait_for_hello(void)
 	printf("Awaiting a COMMAND_HELLO...\n");
 	serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	while (hello_packet.Command != EARLY_FLASH_RESCUE_COMMAND_HELLO) {
-		fprintf(stderr, "Still awaiting a COMMAND_HELLO. Serial port busy...\n");
+		fprintf(stderr, "Still awaiting a COMMAND_HELLO. Serial port busy... (byte 0x%x)\n", hello_packet.Command);
 		serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	}
 
@@ -169,6 +169,7 @@ void perform_flash(void)
 {
 	struct stat bios_fp_stats;
 	bool region_modified;
+	uint16_t modified_blocks;
 	void *bios_block;
 	time_t start_time, stop_time, diff_time;
 	size_t status;
@@ -188,6 +189,7 @@ void perform_flash(void)
 	// Write modified blocks
 	printf("Writing...\n");
 	region_modified = false;
+	modified_blocks = 0;
 	bios_block = malloc(SIZE_BLOCK);
 	time(&start_time);
 	for (int i = 0; i < bios_fp_stats.st_size; i += SIZE_BLOCK) {
@@ -204,6 +206,7 @@ void perform_flash(void)
 		if (request_block_checksum(i) != crc) {
 			write_block(i, bios_block);
 			region_modified = true;
+			modified_blocks++;
 		}
 	}
 	printf("\n");
@@ -235,6 +238,7 @@ void perform_flash(void)
 	time(&stop_time);
 	diff_time = stop_time - start_time;
 	printf("\nWrite operation took %ldm%lds\n", diff_time / 60, diff_time % 60);
+	printf("Wrote %d blocks\n", modified_blocks);
 
 	// Finalise
 	command_packet.Command = EARLY_FLASH_RESCUE_COMMAND_RESET;

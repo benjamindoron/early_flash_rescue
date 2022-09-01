@@ -89,23 +89,16 @@ functional on their board.
 * In the board DSC file, enable the feature
 ```
 [PcdsFeatureFlag]
-  gUsb3DebugFeaturePkgTokenSpaceGuid.PcdUsb3DebugFeatureEnable|TRUE
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdFlashRescueFeatureEnable|TRUE
 ```
-* In the board DSC file, select the implementation desired
+* In the board FDF file, insert the module into FV (and APRIORI)
 ```
-[PcdsFixedAtBuild]
-  # 0 = Non-functional instance
-  # 1 = Regular instance
-  # 2 = IO MMU instance
-  gUsb3DebugFeaturePkgTokenSpaceGuid.PcdUsb3DebugPortLibInstance|1
-```
-* In the board DSC file, configure the PCI device information
-```
-[PcdsFixedAtBuild]
-  gUsb3DebugFeaturePkgTokenSpaceGuid.PcdUsbSerialXhciBus|0x00
-  gUsb3DebugFeaturePkgTokenSpaceGuid.PcdUsbSerialXhciDev|0x14
-  gUsb3DebugFeaturePkgTokenSpaceGuid.PcdUsbSerialXhciFunc|0x00
-  gUsb3DebugFeaturePkgTokenSpaceGuid.PcdXhciDefaultBaseAddress|0xFEA10000
+APRIORI PEI {
+  # Optionally, other modules prepended/appended...
+  INF  EarlySpiFlashRescueFeaturePkg/EarlyFlashRescueBoardPei/EarlyFlashRescueBoardPei.inf
+}
+
+INF  EarlySpiFlashRescueFeaturePkg/EarlyFlashRescueBoardPei/EarlyFlashRescueBoardPei.inf
 ```
 
 
@@ -117,9 +110,10 @@ This section is expected to provide guidance on:
 * How to measure performance impact of the feature
 * How to manage performance impact of the feature
 
-## TODO: Common Optimizations
-* In the board DSC file, tune the timeout value
+## Common Optimizations
+* In the board DSC file, tune the timeout value and packet size
 ```
 [PcdsFixedAtBuild]
-  gUsb3DebugFeaturePkgTokenSpaceGuid.PcdXhciHostWaitTimeout|2000000
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdUserspaceHostWaitTimeout|15000
+  gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdDataXferPacketSize|64
 ```
