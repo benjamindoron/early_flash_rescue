@@ -110,7 +110,7 @@ void wait_for_hello(void)
 	printf("Awaiting a COMMAND_HELLO...\n");
 	serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	while (hello_packet.Command != EARLY_FLASH_RESCUE_COMMAND_HELLO) {
-		fprintf(stderr, "Still awaiting a COMMAND_HELLO. Serial port busy... (byte 0x%x)\n", hello_packet.Command);
+		fprintf(stderr, "Still awaiting a COMMAND_HELLO. Serial port busy...\n");
 		serial_fifo_read(&hello_packet, sizeof(hello_packet));
 	}
 
@@ -122,6 +122,7 @@ void wait_for_hello(void)
 	tcflush(serial_dev, TCIOFLUSH);
 }
 
+/* TODO: Handle NACKs */
 // By requesting checksums, we attempt optimising the flash procedure
 uint32_t request_block_checksum(uint32_t address)
 {
@@ -157,9 +158,7 @@ void write_block(uint32_t address, void *block)
 	for (int i = 0; i < SIZE_BLOCK; i += xfer_block_size) {
 		serial_fifo_write(xfer_block, xfer_block_size);
 		xfer_block += xfer_block_size;
-		// FIXME: This will incur significant penalty
-		// - However, low baud rate here means that CRC write does not hold
-		// - Alternatively, raise FTDI baud rate?
+		// FIXME: This will incur some penalty, but we must wait
 		wait_for_ack_on("WRITE_DATA", address);
 	}
 }
@@ -202,7 +201,6 @@ void perform_flash(void)
 
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
-		// TODO: Handle NACKs
 		if (request_block_checksum(i) != crc) {
 			write_block(i, bios_block);
 			region_modified = true;
@@ -229,7 +227,6 @@ void perform_flash(void)
 
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
-		// TODO: Handle NACKs
 		if (request_block_checksum(i) != crc) {
 			fprintf(stderr, "Verification FAILURE at 0x%x!\n", i);
 			region_modified = true;
@@ -261,7 +258,7 @@ int main(int argc, char *argv[])
 	// Print hello text
 	printf("Early BIOS flash rescue v%.2f (Userspace side)\n",
 	       EARLY_FLASH_RESCUE_PROTOCOL_VERSION);
-	printf("NB: Cannot open console - serial read() is racey\n\n");
+	printf("NB: Do not open console - serial read() is racey\n\n");
 
 	// Step 1
 	return_value = initialise_userspace(argc, argv);

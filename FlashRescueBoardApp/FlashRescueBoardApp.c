@@ -1,5 +1,5 @@
 /** @file
-  Early SPI flash rescue protocol - board implementation
+  Early SPI flash rescue protocol - board implementation.
 
   Copyright (c) 2022, Baruch Binyamin Doron.<BR>
   SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -66,7 +66,6 @@ FlashRescueBoardAppEntryPoint (
   IN EFI_SYSTEM_TABLE  *SystemTable
   )
 {
-  EFI_TPL     PreviousTpl;
   EFI_STATUS  Status;
 
   Print (L"FlashRescueBoardAppEntryPoint() Start\n");

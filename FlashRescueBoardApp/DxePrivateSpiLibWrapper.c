@@ -45,7 +45,7 @@ SpiServiceInit (
   /// Allocate pool for SPI protocol instance
   ///
   Status = gBS->AllocatePool (
-                 EfiBootServicesData, /// Maybe care
+                 EfiBootServicesCode, /// DXE cares
                  sizeof (SPI_INSTANCE),
                  (VOID **) &mSpiInstance
                  );
@@ -60,7 +60,6 @@ SpiServiceInit (
   ZeroMem ((VOID *) mSpiInstance, sizeof (SPI_INSTANCE));
   ///
   /// Initialize the SPI protocol instance
-  /// - NOTE: Initialise instance. Functions are called manually
   ///
   Status = SpiProtocolConstructor (mSpiInstance);
   if (EFI_ERROR (Status)) {

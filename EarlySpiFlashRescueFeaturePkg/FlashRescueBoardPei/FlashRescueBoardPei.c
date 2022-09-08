@@ -1,5 +1,5 @@
 /** @file
-  Early SPI flash rescue protocol - board implementation
+  Early SPI flash rescue protocol - board implementation.
 
   Copyright (c) 2022, Baruch Binyamin Doron.<BR>
   SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -12,6 +12,7 @@
 #include <Library/PeiServicesLib.h>
 #include <Library/ResetSystemLib.h>
 #include <Library/SpiLib.h>
+#include <Library/TimerLib.h>
 #include <Ppi/FeatureInMemory.h>
 #include <Ppi/Spi2.h>
 #include "FlashRescueBoard.h"
@@ -61,7 +62,6 @@ PerformSystemReset (
 {
   //
   // PPI may be unavailable, but do not risk UAF. Must use silicon variant
-  // 
   //
   ResetCold ();
 }
@@ -102,16 +102,18 @@ FlashRescueBoardPeiEntryPoint (
     Status = PerformFlash ();
     ASSERT_EFI_ERROR (Status);
 
-    goto End;
+    return EFI_SUCCESS;
   }
 
   //
   // First entry: Establish communication with board or don't reload
   //
-  DEBUG ((DEBUG_INFO, "HELLO begins. Re-connect with userspace-side\n"));
+  DEBUG ((DEBUG_INFO, "HELLO begins. Re-connect with userspace-side now\n"));
+  MicroSecondDelay (3000 * MS_IN_SECOND);
+
   Status = SendHelloPacket ();
   if (EFI_ERROR (Status)) {
-    goto End;
+    return EFI_SUCCESS;
   }
 
   //
@@ -161,12 +163,14 @@ FlashRescueBoardPeiEntryPoint (
   PeiServicesInstallPpi (&mFlashRescueReadyInMemoryPpiList);
   ASSERT_EFI_ERROR (Status);
 
+  DEBUG ((DEBUG_INFO, "ATTN: This PEIM copied to 0x%x\n", ImageContext.ImageAddress));
+
   PeimEntryPoint = (EFI_PEIM_ENTRY_POINT2)(UINTN)ImageContext.EntryPoint;
   Status = PeimEntryPoint (FileHandle, PeiServices);
   ASSERT_EFI_ERROR (Status);
 
   //
-  // Cleanup
+  // Cleanup. It is important that PPIs do not point here
   //
   Status = SpiServiceInit ();
   ASSERT_EFI_ERROR (Status);
@@ -177,6 +181,5 @@ FlashRescueBoardPeiEntryPoint (
              );
   ASSERT_EFI_ERROR (Status);
 
-End:
   return EFI_SUCCESS;
 }

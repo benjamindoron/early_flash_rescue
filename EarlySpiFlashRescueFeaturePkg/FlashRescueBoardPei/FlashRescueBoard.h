@@ -58,7 +58,6 @@ PerformSystemReset (
 
 /**
  * Send HELLO command to an awaiting userspace.
- * Permit 15s for response.
  *
  * @return EFI_SUCCESS  Command acknowledged.
  * @return EFI_TIMEOUT  Command timed-out.

@@ -8,7 +8,6 @@
 #include <Uefi.h>
 #include <Library/BaseLib.h>
 #include <Library/DebugLib.h>
-#include <Library/MemoryAllocationLib.h>
 #include <Library/PcdLib.h>
 #include <Library/SerialPortLib.h>
 #include <Library/SpiLib.h>
@@ -21,7 +20,6 @@ static UINT16 XferBlockSize = FixedPcdGet16 (PcdDataXferPacketSize);
 
 /**
  * Send HELLO command to an awaiting userspace.
- * Permit 15s for response.
  *
  * @return EFI_SUCCESS  Command acknowledged.
  * @return EFI_TIMEOUT  Command timed-out.
@@ -44,9 +42,9 @@ SendHelloPacket (
 
   for (TimeCounter = 0; TimeCounter < WaitTimeout; TimeCounter += 250) {
     // Maybe packet was not in FIFO
-    SerialPortWrite ((UINT8 *)&CommandPacket, sizeof(CommandPacket));
+    SerialPortWrite ((UINT8 *)&CommandPacket, sizeof (CommandPacket));
 
-    SerialPortRead ((UINT8 *)&ResponsePacket, sizeof(ResponsePacket));
+    SerialPortRead ((UINT8 *)&ResponsePacket, sizeof (ResponsePacket));
     if (ResponsePacket.Acknowledge == 1) {
       return EFI_SUCCESS;
     }
@@ -59,6 +57,7 @@ SendHelloPacket (
 
 /**
  * Send the requested block CRC to an awaiting userspace.
+ * - TODO: NACK blocks as necessary
 **/
 VOID
 EFIAPI
@@ -68,20 +67,18 @@ SendBlockChecksum (
 {
   PCH_SPI2_PROTOCOL            *Spi2Ppi;
   UINTN                        Address;
-  VOID                         *BlockData;
+  UINT8                        BlockData[SIZE_BLOCK];
   EFI_STATUS                   Status;
   UINT32                       Crc;
   EARLY_FLASH_RESCUE_RESPONSE  ResponsePacket;
 
   Spi2Ppi = GetSpiPpi ();
-  ASSERT (Spi2Ppi != NULL);
   if (Spi2Ppi == NULL) {
-    goto End;
+    return;
   }
 
   // `BlockNumber` starting in BIOS region
   Address = BlockNumber * SIZE_BLOCK;
-  BlockData = AllocatePages (EFI_SIZE_TO_PAGES (SIZE_BLOCK));
 
   Status = Spi2Ppi->FlashRead (
              Spi2Ppi,
@@ -91,23 +88,20 @@ SendBlockChecksum (
              BlockData
              );
   if (EFI_ERROR (Status)) {
-    // TODO: NACK the block
-    goto End;
+    return;
   }
 
   Crc = CalculateCrc32 (BlockData, SIZE_BLOCK);
 
   // Now, acknowledge userspace request and send block CRC
   ResponsePacket.Acknowledge = 1;
-  SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof(ResponsePacket));
-  SerialPortWrite ((UINT8 *)&Crc, sizeof(Crc));
-
-End:
-  FreePages (BlockData, EFI_SIZE_TO_PAGES (SIZE_BLOCK));
+  SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof (ResponsePacket));
+  SerialPortWrite ((UINT8 *)&Crc, sizeof (Crc));
 }
 
 /**
  * Write the requested SPI flash block.
+ * - TODO: NACK blocks as necessary
 **/
 VOID
 EFIAPI
@@ -117,42 +111,41 @@ WriteBlock (
 {
   PCH_SPI2_PROTOCOL            *Spi2Ppi;
   UINTN                        Address;
-  VOID                         *BlockData;
+  UINT8                        BlockData[SIZE_BLOCK];
   EARLY_FLASH_RESCUE_RESPONSE  ResponsePacket;
   VOID                         *XferBlock;
   UINTN                        Index;
   EFI_STATUS                   Status;
 
   Spi2Ppi = GetSpiPpi ();
-  ASSERT (Spi2Ppi != NULL);
   if (Spi2Ppi == NULL) {
-    goto End;
+    return;
   }
 
   // `BlockNumber` starting in BIOS region
   Address = BlockNumber * SIZE_BLOCK;
-  BlockData = AllocatePages (EFI_SIZE_TO_PAGES (SIZE_BLOCK));
 
   // Acknowledge userspace command and retrieve block
   ResponsePacket.Acknowledge = 1;
-  SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof(ResponsePacket));
+  SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof (ResponsePacket));
 
   // Start streaming block
   XferBlock = BlockData;
   for (Index = 0; Index < SIZE_BLOCK; Index += XferBlockSize) {
     // FIXME: This will incur some penalty, but we must wait
     // - Still debugging timing parameters, especially at higher baudrate
-    MicroSecondDelay (50 * MS_IN_SECOND);
+    // - Possible optimisation: Shorter stall if SerialPortPoll()
+    MicroSecondDelay (33 * MS_IN_SECOND);
 
     SerialPortRead (XferBlock, XferBlockSize);
     XferBlock += XferBlockSize;
 
     // FIXME: This will incur some penalty, but userspace must wait
     ResponsePacket.Acknowledge = 1;
-    SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof(ResponsePacket));
+    SerialPortWrite ((UINT8 *)&ResponsePacket, sizeof (ResponsePacket));
   }
 
-  // TODO: SPI flash is is fairly durable, but determine when erase is necessary.
+  // SPI flash is is fairly durable, but determine when erase is necessary.
   Status = Spi2Ppi->FlashErase (
              Spi2Ppi,
              &gFlashRegionBiosGuid,
@@ -160,11 +153,9 @@ WriteBlock (
              SIZE_BLOCK
              );
   if (EFI_ERROR (Status)) {
-    // TODO: NACK the block
-    goto End;
+    return;
   }
 
-  // TODO: NACK the block
   Status = Spi2Ppi->FlashWrite (
              Spi2Ppi,
              &gFlashRegionBiosGuid,
@@ -172,9 +163,6 @@ WriteBlock (
              SIZE_BLOCK,
              BlockData
              );
-
-End:
-  FreePages (BlockData, EFI_SIZE_TO_PAGES (SIZE_BLOCK));
 }
 
 /**
@@ -213,7 +201,7 @@ PerformFlash (
       // Stall a tiny bit, in-case the remainder of the packet is flushing
       MicroSecondDelay (10 * MS_IN_SECOND);
 
-      SerialPortRead ((UINT8 *)&CommandPacket, sizeof(CommandPacket));
+      SerialPortRead ((UINT8 *)&CommandPacket, sizeof (CommandPacket));
       switch (CommandPacket.Command) {
         case EARLY_FLASH_RESCUE_COMMAND_CHECKSUM:
           SendBlockChecksum (CommandPacket.BlockNumber);
