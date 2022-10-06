@@ -202,6 +202,7 @@ void perform_flash(void)
 		// Independent checksums
 		crc = crc32(0, bios_block, SIZE_BLOCK);
 		if (request_block_checksum(i) != crc) {
+			// TODO/NB: printf("0x%x\n", i);
 			write_block(i, bios_block);
 			region_modified = true;
 			modified_blocks++;
@@ -234,7 +235,7 @@ void perform_flash(void)
 	}
 	time(&stop_time);
 	diff_time = stop_time - start_time;
-	printf("\nWrite operation took %ldm%lds\n", diff_time / 60, diff_time % 60);
+	printf("\nFlash operation took %ldm%lds\n", diff_time / 60, diff_time % 60);
 	printf("Wrote %d blocks\n", modified_blocks);
 
 	// Finalise
@@ -258,7 +259,7 @@ int main(int argc, char *argv[])
 	// Print hello text
 	printf("Early BIOS flash rescue v%.2f (Userspace side)\n",
 	       EARLY_FLASH_RESCUE_PROTOCOL_VERSION);
-	printf("NB: Do not open console - serial read() is racey\n\n");
+	printf("NB: Terminal must be closed as serial FIFO is racey\n\n");
 
 	// Step 1
 	return_value = initialise_userspace(argc, argv);

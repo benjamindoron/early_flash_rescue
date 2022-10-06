@@ -39,6 +39,7 @@ SendHelloPacket (
 
   // TODO: Consider sending a total `BlockNumber`?
   CommandPacket.Command = EARLY_FLASH_RESCUE_COMMAND_HELLO;
+  CommandPacket.BlockNumber = 0;
 
   for (TimeCounter = 0; TimeCounter < WaitTimeout; TimeCounter += 250) {
     // Maybe packet was not in FIFO

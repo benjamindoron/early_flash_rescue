@@ -39,6 +39,7 @@ SendHelloPacket (
 
   // TODO: Consider sending a total `BlockNumber`?
   CommandPacket.Command = EARLY_FLASH_RESCUE_COMMAND_HELLO;
+  CommandPacket.BlockNumber = 0;
 
   for (TimeCounter = 0; TimeCounter < WaitTimeout; TimeCounter += 250) {
     // Maybe packet was not in FIFO
@@ -134,6 +135,7 @@ WriteBlock (
   for (Index = 0; Index < SIZE_BLOCK; Index += XferBlockSize) {
     // FIXME: This will incur some penalty, but we must wait
     // - Still debugging timing parameters, especially at higher baudrate
+    // - Possible optimisation: Shorter stall if SerialPortPoll()
     MicroSecondDelay (33 * MS_IN_SECOND);
 
     SerialPortRead (XferBlock, XferBlockSize);

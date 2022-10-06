@@ -71,6 +71,7 @@ void serial_fifo_write(void *data, size_t number_of_bytes)
 // Can block while awaiting a busy board
 void serial_fifo_read(void *data, size_t number_of_bytes)
 {
+	// Do not flush, maintain following FIFO bytes
 	size_t status = read(serial_dev, data, number_of_bytes);
 	assert(status > 0);
 }

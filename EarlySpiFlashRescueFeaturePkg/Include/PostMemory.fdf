@@ -1,5 +1,5 @@
 ## @file
-#  FDF file for post-memory modules that enable USB3 Debug
+#  FDF file for post-memory modules that enable the SPI flash rescue feature.
 #
 # Copyright (c) 2019, Intel Corporation. All rights reserved.<BR>
 #

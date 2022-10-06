@@ -9,6 +9,7 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/DebugLib.h>
 #include <Library/PeCoffLib.h>
+#include <Library/PcdLib.h>
 #include <Library/PeiServicesLib.h>
 #include <Library/ResetSystemLib.h>
 #include <Library/SpiLib.h>
@@ -67,6 +68,44 @@ PerformSystemReset (
 }
 
 /**
+ * During no-evict mode, cache coherency is by definition not maintained.
+ * Consequently, it's quite plausible that L1i and L3 (CAR) become out of sync.
+ * This results in the CPU throwing #UD for valid code and instructions loaded
+ * into CAR.
+ * As has been explained to me, this is because uOps in L1i do not match
+ * instructions in CAR.
+ * Therefore, attempt to saturate the L1 caches so that prior contents are demoted
+ * to L2. Then any access to CAR will cache-miss L1.
+ *
+ * This issue is provably the case since there is no issue in DRAM.
+**/
+STATIC
+UINT32
+EFIAPI
+FlushBiosHack (
+  VOID
+  )
+{
+  UINT32           temp;
+  UINT32           codeRegionStartAddr = 0xFFF00000;
+  UINT32           codeSizeInDWords = 640 * 1024 / 4;  // 640K / 4; larger caches
+  volatile UINT32  *codeAddr;
+  UINT32           DWordIdx;
+  UINT32           repeatCnt = 2;
+  UINT32           repeatIdx;
+
+  temp = 0;
+  for (repeatIdx = 0; repeatIdx < repeatCnt; repeatIdx++) {
+    for (DWordIdx = 0; DWordIdx < codeSizeInDWords; DWordIdx++) {
+      codeAddr = (volatile UINT32 *) (codeRegionStartAddr + DWordIdx * 4);
+      temp |= *codeAddr;
+    }
+  }
+
+  return temp;
+}
+
+/**
   Entry Point function
 
   @param[in] FileHandle  Handle of the file being invoked.
@@ -117,6 +156,15 @@ FlashRescueBoardPeiEntryPoint (
   }
 
   //
+  // If the DEBUG() stack uses the same transport as our SerialPortLib,
+  // it seems like commands are lost when DEBUG() fills the FIFO.
+  // Therefore, disable DEBUG().
+  // - However, this requires testing.
+  // - TODO: Must re-enable DEBUG() for other modules?
+  //
+  PatchPcdSet32 (PcdDebugPrintErrorLevel, 0x0);
+
+  //
   // Find this PEIM, then obtain a PE context with its data handle
   //
   Status = PeiServicesFfsFindSectionData (
@@ -157,13 +205,13 @@ FlashRescueBoardPeiEntryPoint (
   Status = PeCoffLoaderRelocateImage (&ImageContext);
   ASSERT_EFI_ERROR (Status);
 
+  FlushBiosHack ();
+
   //
   // Install flag PPI and call entrypoint
   //
   PeiServicesInstallPpi (&mFlashRescueReadyInMemoryPpiList);
   ASSERT_EFI_ERROR (Status);
-
-  DEBUG ((DEBUG_INFO, "ATTN: This PEIM copied to 0x%x\n", ImageContext.ImageAddress));
 
   PeimEntryPoint = (EFI_PEIM_ENTRY_POINT2)(UINTN)ImageContext.EntryPoint;
   Status = PeimEntryPoint (FileHandle, PeiServices);

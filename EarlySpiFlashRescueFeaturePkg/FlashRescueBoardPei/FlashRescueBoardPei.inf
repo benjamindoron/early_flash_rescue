@@ -32,6 +32,7 @@
   BaseMemoryLib
   DebugLib
   MemoryAllocationLib
+  PcdLib
   PeCoffLib
   ResetSystemLib
   SerialPortLib
@@ -45,6 +46,7 @@
   gFlashRegionBiosGuid
 
 [Pcd]
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel
   gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdUserspaceHostWaitTimeout
   gEarlySpiFlashRescueFeaturePkgTokenSpaceGuid.PcdDataXferPacketSize
 
